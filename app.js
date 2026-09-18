@@ -1,16 +1,6 @@
 /* ============================================================
-   1. FIREBASE-KONFIGURATION
-   Byt ut värdena nedan mot din egen config från Firebase Console
-   (Project settings -> General -> Your apps -> SDK setup and config)
+   1. FIREBASE-KONFIGURATION (Compat SDK)
    ============================================================ */
-// Import the functions you need from the SDKs you need
-import { initializeApp } from "firebase/app";
-import { getAnalytics } from "firebase/analytics";
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
-
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
 const firebaseConfig = {
   apiKey: "AIzaSyAm8SfU8t8vT7Jzu8YAhENjiudEpDhswo8",
   authDomain: "no4-schema.firebaseapp.com",
@@ -21,12 +11,29 @@ const firebaseConfig = {
   measurementId: "G-TVPDYHDTKF"
 };
 
-// Initialize Firebase
-const app = initializeApp(firebaseConfig);
-const analytics = getAnalytics(app);
+// Initiera Firebase & Firestore
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
 
-/* Byt till valfritt lösenord för admin-fliken (enbart UI-skydd, ej riktig säkerhet) */
+/* Lösenord för admin-fliken */
 const ADMIN_PASSWORD = "Pubdata7101";
+
+/* Serveringsansvariga (måste ingå i barlaget) */
+const SERVERINGSANSVARIGA = [
+  "Emma Hugod", "Wilmer Stenberg", "Andrea Aulin", "Oscar Regner",
+  "Assar Holst", "Hannes Svanström", "Jensine Svensson", "Måns Svahn", "Leonard Hillerback"
+];
+
+/* Hela Barlaget */
+const ALLA_BARLAGARE = [
+  "Adrian Arnqvist", "Agnes Thelberg", "Andrea Aulin", "Arve Lignell",
+  "Assar Holst", "Astrid Kellerman", "Carl Henriksson", "Colin Mohlen",
+  "Ella Fjäderstål", "Emanuel Kronstrand", "Emma Hugod", "Fayes Sarraj",
+  "Filip Wettre", "Hannes Svanström", "Jensine Svensson", "Joel Bjurström",
+  "Leonard Hillerback", "Maja Nådell", "Marcus Eisner", "Måns Svahn", "Noel Anundi",
+  "Olle Stjernström", "Oscar Regner", "Sebastian Axelsson", "Willy Zedell",
+  "Wilma Forslin", "Wilmer Stenberg"
+];
 
 /* ============================================================
    2. HJÄLPFUNKTIONER FÖR DATUM/MÅNADER
@@ -51,7 +58,7 @@ function addMonthsToKey(key, delta) {
   return monthKey(d);
 }
 
-// Alla onsdagar (3) och fredagar (5) i en given månad "YYYY-MM"
+// Hämta alla onsdagar (3) och fredagar (5)
 function getShiftDatesInMonth(key) {
   const [y, m] = key.split("-").map(Number);
   const dates = [];
@@ -78,7 +85,7 @@ function formatDateNice(iso) {
 }
 
 /* ============================================================
-   3. FLIKAR
+   3. NAVIGATION / FLIKAR
    ============================================================ */
 document.querySelectorAll(".tab-btn").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -90,23 +97,36 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 });
 
 /* ============================================================
-   4. FLIK: FORMULÄR
+   4. FLIK 1: FORMULÄR
    ============================================================ */
 const today = todayDate();
 const currentKey = monthKey(today);
-// Formuläret gäller alltid NÄSTA månad (deadline är den 20:e)
 const formTargetMonth = addMonthsToKey(currentKey, 1);
 
 function initForm() {
+  const dayOfMonth = today.getDate();
+  const formCard = document.getElementById("formCard");
+  const formClosedMsg = document.getElementById("formClosedMsg");
+
+  // Formuläret är öppet mellan 1:a och 20:e
+  if (dayOfMonth > 20) {
+    formCard.style.display = "none";
+    formClosedMsg.style.display = "block";
+    return;
+  }
+
+  formCard.style.display = "block";
+  formClosedMsg.style.display = "none";
+
   document.getElementById("form-title").textContent = `Formulär – ${monthKeyToName(formTargetMonth)}`;
-  document.getElementById("form-subtitle").textContent = `Svara innan den 20:e denna månaden. Om du inte svarar alls antas du vilja jobba 1 pass och vara tillgänglig alla datum.`;
+  document.getElementById("form-subtitle").textContent = `Svara innan den 20:e denna månad. Svarar du inte antas du vilja jobba 1 pass och vara tillgänglig alla datum.`;
 
   const dates = getShiftDatesInMonth(formTargetMonth);
   const container = document.getElementById("dateCheckboxes");
   container.innerHTML = "";
 
   const allLabel = document.createElement("label");
-  allLabel.innerHTML = `<input type="checkbox" id="availableAll" /> Jag är tillgänglig alla datum :D`;
+  allLabel.innerHTML = `<input type="checkbox" id="availableAll" /> Jag kan jobba ALLA datum :D`;
   container.appendChild(allLabel);
 
   dates.forEach(dt => {
@@ -132,9 +152,9 @@ document.querySelectorAll('input[name="shifts"]').forEach(r => {
 
 document.getElementById("availabilityForm").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const name = document.getElementById("name").value.trim();
+  const name = document.getElementById("nameSelect").value;
   const shiftsEl = document.querySelector('input[name="shifts"]:checked');
-  const shifts = shiftsEl ? shiftsEl.value : "1-2";
+  const shifts = shiftsEl ? shiftsEl.value : "1";
   const availableAll = document.getElementById("availableAll").checked;
   const unavailable = availableAll ? [] :
     Array.from(document.querySelectorAll(".dateCheck:checked")).map(cb => cb.value);
@@ -162,53 +182,321 @@ document.getElementById("availabilityForm").addEventListener("submit", async (e)
 });
 
 /* ============================================================
-   5. FLIK: SCHEMA
+   5. FLIK 2: SCHEMA
    ============================================================ */
 async function loadSchedule(key) {
   const doc = await db.collection("schedules").doc(key).get();
   return doc.exists ? doc.data() : null;
 }
 
-function renderMonthBlock(elId, key, headerClass, headerLabelPrefix, data) {
+function renderMonthBlock(elId, key, data) {
   const el = document.getElementById(elId);
-  if (!data) { el.innerHTML = ""; return; }
+  if (!el) return;
 
-  let html = `<div class="month-header ${headerClass}">${headerLabelPrefix}${monthKeyToName(key)}</div>`;
+  if (!data) {
+    // Om valt datum är framtida/nästa månad och före den 21:a
+    const nextKey = addMonthsToKey(currentKey, 1);
+    if (key >= nextKey && today.getDate() < 21) {
+      el.innerHTML = `<div class="card muted">Nästa månads schema publiceras den 21:a.</div>`;
+    } else {
+      el.innerHTML = `<div class="card muted">Inget schema tillgängligt för denna månad.</div>`;
+    }
+    return;
+  }
+
+  let html = `<div class="month-header current">${monthKeyToName(key)}</div>`;
   data.days.forEach(day => {
     html += `<div class="shift-card">
       <div class="shift-date">${formatDateNice(day.date)}${day.event ? " – " + day.event : ""} ${day.time ? `<span class="muted small">(${day.time})</span>` : ""}</div>`;
-    html += `<div class="shift-role"><span>Serveringsansvarig</span><span>${day.servering || "–"}</span></div>`;
-    (day.barlagare || []).forEach(b => {
-      html += `<div class="shift-role"><span>Barlagare</span><span>${b || "–"}</span></div>`;
+    html += `<div class="shift-role"><span>Serveringsansvarig</span><span><strong>${day.servering || "–"}</strong></span></div>`;
+    (day.barlagare || []).forEach((b, i) => {
+      html += `<div class="shift-role"><span>Barlagare ${i+1}</span><span>${b || "–"}</span></div>`;
     });
     html += `</div>`;
   });
   el.innerHTML = html;
 }
 
-async function initSchedule() {
-  const prevKey = addMonthsToKey(currentKey, -1);
+async function displaySelectedMonth(key) {
+  const container = document.getElementById("selectedMonthBlock");
+  if (container) {
+    container.innerHTML = `<div class="card muted">Laddar schema...</div>`;
+  }
+
+  // Slumpa automatiskt om den 21:a passerats och nästa månads schema saknas
   const nextKey = addMonthsToKey(currentKey, 1);
+  if (today.getDate() >= 21 && key === nextKey) {
+    const existingNext = await loadSchedule(nextKey);
+    if (!existingNext) {
+      await generateAutoSchedule(nextKey);
+    }
+  }
 
-  const [prevData, curData, nextData] = await Promise.all([
-    loadSchedule(prevKey),
-    loadSchedule(currentKey),
-    loadSchedule(nextKey)
-  ]);
+  const data = await loadSchedule(key);
+  renderMonthBlock("selectedMonthBlock", key, data);
+}
 
-  renderMonthBlock("prevMonthBlock", prevKey, "prev", "Föregående månad – ", prevData);
-  renderMonthBlock("currentMonthBlock", currentKey, "current", "Denna månaden – ", curData);
+function initScheduleSelect() {
+  const select = document.getElementById("scheduleMonthSelect");
+  if (!select) return;
 
-  // Nästa månads schema visas bara fr.o.m. den 21:a, om det är publicerat
-  if (today.getDate() >= 21 && nextData) {
-    renderMonthBlock("nextMonthBlock", nextKey, "next", "Nästa månad – ", nextData);
-  } else {
-    document.getElementById("nextMonthBlock").innerHTML = "";
+  select.innerHTML = "";
+
+  // Generera alternativ från t.ex. 6 månader tillbaka till 3 månader framåt
+  for (let d = -6; d <= 3; d++) {
+    const key = addMonthsToKey(currentKey, d);
+    const opt = document.createElement("option");
+    opt.value = key;
+    opt.textContent = monthKeyToName(key);
+    if (key === currentKey) {
+      opt.selected = true; // Sätt nuvarande månad som standardvalt alternativ
+    }
+    select.appendChild(opt);
+  }
+
+  select.addEventListener("change", (e) => {
+    displaySelectedMonth(e.target.value);
+  });
+
+  // Ladda in nuvarande månad från start
+  displaySelectedMonth(currentKey);
+}
+/* ============================================================
+   6. SLUMPNING AV SCHEMA MED "KAN EJ"-RESPRESPEKT
+   ============================================================ */
+async function generateAutoSchedule(key) {
+  const dates = getShiftDatesInMonth(key);
+  const snap = await db.collection("submissions").where("month", "==", key).get();
+  
+  // Mappa inkomna svar per namn
+  const submissionsMap = {};
+  snap.forEach(doc => {
+    const data = doc.data();
+    submissionsMap[data.name] = data;
+  });
+
+  // Skapa tillgänglighetsprofil för alla barlagare (inklusive de som inte svarat)
+  const people = ALLA_BARLAGARE.map(name => {
+    const sub = submissionsMap[name];
+    let maxShifts = 1;
+    let unavailable = [];
+
+    if (sub) {
+      if (sub.shifts === "frikort") maxShifts = 0;
+      else if (sub.shifts === "2") maxShifts = 2;
+      else if (sub.shifts === "3+") maxShifts = 3;
+      else maxShifts = 1;
+
+      unavailable = sub.unavailable || [];
+    }
+
+    return {
+      name,
+      isSA: SERVERINGSANSVARIGA.includes(name),
+      maxShifts,
+      assignedShifts: 0,
+      unavailable
+    };
+  });
+
+  const days = [];
+
+  for (const dt of dates) {
+    const isOnsdag = dt.weekday === "onsdag";
+    const barCount = isOnsdag ? 2 : 3; // 3 pers onsdag (1 SA + 2 Bar), 4 pers fredag (1 SA + 3 Bar)
+    const time = isOnsdag ? "17:30-22:00" : "20:30-02:00";
+
+    // 1. Välj Serveringsansvarig (måste kunna jobba och inte ha nått maxShift om möjligt)
+    let availableSA = people.filter(p => p.isSA && !p.unavailable.includes(dt.iso));
+    
+    // Sortera på minst antal tilldelade pass
+    availableSA.sort((a, b) => a.assignedShifts - b.assignedShifts || Math.random() - 0.5);
+
+    let chosenSA = availableSA[0];
+    let saName = "Ej tillsatt";
+
+    if (chosenSA) {
+      saName = chosenSA.name;
+      chosenSA.assignedShifts++;
+    }
+
+    // 2. Välj Barlagare (får inte vara vald SA, måste kunna jobba)
+    let availableBar = people.filter(p => p.name !== saName && !p.unavailable.includes(dt.iso) && p.maxShifts > 0);
+    
+    // Sortera på minst antal tilldelade pass i första hand, sedan slumpmässigt
+    availableBar.sort((a, b) => a.assignedShifts - b.assignedShifts || Math.random() - 0.5);
+
+    const barlagareNames = [];
+    for (let i = 0; i < barCount; i++) {
+      if (availableBar[i]) {
+        barlagareNames.push(availableBar[i].name);
+        availableBar[i].assignedShifts++;
+      } else {
+        barlagareNames.push("Ej tillsatt");
+      }
+    }
+
+    days.push({
+      date: dt.iso,
+      event: "",
+      time: time,
+      servering: saName,
+      barlagare: barlagareNames
+    });
+  }
+
+  await db.collection("schedules").doc(key).set({
+    month: key,
+    days: days,
+    publishedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    autoGenerated: true
+  });
+}
+
+/* ============================================================
+   7. FLIK 3: BARLAGET LISTA MED HANDLER FÖR + OCH -
+   ============================================================ */
+let currentSA = [...SERVERINGSANSVARIGA];
+let currentAlla = [...ALLA_BARLAGARE];
+
+async function loadTeamData() {
+  try {
+    const docSA = await db.collection("settings").doc("serveringsansvariga").get();
+    if (docSA.exists && docSA.data().list) {
+      currentSA = docSA.data().list;
+    }
+
+    const docAlla = await db.collection("settings").doc("alla_barlagare").get();
+    if (docAlla.exists && docAlla.data().list) {
+      currentAlla = docAlla.data().list;
+    }
+  } catch (err) {
+    console.error("Kunde inte hämta teamdata från Firestore, använder standardlistor:", err);
+  }
+}
+
+async function saveTeamData() {
+  try {
+    await db.collection("settings").doc("serveringsansvariga").set({ list: currentSA });
+    await db.collection("settings").doc("alla_barlagare").set({ list: currentAlla });
+  } catch (err) {
+    console.error("Kunde inte spara teamdata:", err);
+  }
+}
+
+function updateFormNameSelect() {
+  const nameSelect = document.getElementById("nameSelect");
+  if (!nameSelect) return;
+
+  const currentSelection = nameSelect.value;
+  nameSelect.innerHTML = '<option value="" disabled selected>Välj ditt namn...</option>';
+
+  [...currentAlla].sort((a, b) => a.localeCompare(b, 'sv')).forEach(name => {
+    const opt = document.createElement("option");
+    opt.value = name;
+    opt.textContent = name;
+    if (name === currentSelection) opt.selected = true;
+    nameSelect.appendChild(opt);
+  });
+}
+
+async function renderBarlagetLists() {
+  const saUl = document.getElementById("saList");
+  const barUl = document.getElementById("barList");
+
+  if (!saUl || !barUl) return;
+
+  saUl.innerHTML = "";
+  barUl.innerHTML = "";
+
+  // Sortera alfabetiskt på svenska
+  currentSA.sort((a, b) => a.localeCompare(b, 'sv'));
+  currentAlla.sort((a, b) => a.localeCompare(b, 'sv'));
+
+  // Rendera Serveringsansvariga
+  currentSA.forEach(name => {
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span>${name}</span>
+      <button class="btn-remove" title="Ta bort från serveringsansvariga">–</button>
+    `;
+    li.querySelector(".btn-remove").addEventListener("click", async () => {
+      if (confirm(`Vill du ta bort ${name} från Serveringsansvariga?`)) {
+        currentSA = currentSA.filter(n => n !== name);
+        await saveTeamData();
+        renderBarlagetLists();
+      }
+    });
+    saUl.appendChild(li);
+  });
+
+  // Rendera Hela Barlaget
+  currentAlla.forEach(name => {
+    const isSA = currentSA.includes(name);
+    const li = document.createElement("li");
+    li.innerHTML = `
+      <span>${name}</span>
+      <div class="member-actions">
+        ${isSA ? '<span class="badge">SA</span>' : ''}
+        <button class="btn-remove" title="Ta bort från barlaget">–</button>
+      </div>
+    `;
+    li.querySelector(".btn-remove").addEventListener("click", async () => {
+      if (confirm(`Vill du ta bort ${name} från Hela Barlaget?`)) {
+        currentAlla = currentAlla.filter(n => n !== name);
+        currentSA = currentSA.filter(n => n !== name);
+        await saveTeamData();
+        renderBarlagetLists();
+      }
+    });
+    barUl.appendChild(li);
+  });
+
+  updateFormNameSelect();
+}
+
+async function initBarlagetTab() {
+  await loadTeamData();
+  await renderBarlagetLists();
+
+  // Klick-event för Plus-knapp: Serveringsansvariga
+  const addSaBtn = document.getElementById("addSaBtn");
+  if (addSaBtn) {
+    addSaBtn.onclick = async () => {
+      const name = prompt("Ange namn på ny Serveringsansvarig:");
+      if (name && name.trim()) {
+        const cleanName = name.trim();
+        if (!currentSA.includes(cleanName)) {
+          currentSA.push(cleanName);
+        }
+        if (!currentAlla.includes(cleanName)) {
+          currentAlla.push(cleanName);
+        }
+        await saveTeamData();
+        renderBarlagetLists();
+      }
+    };
+  }
+
+  // Klick-event för Plus-knapp: Barlagare
+  const addBarBtn = document.getElementById("addBarBtn");
+  if (addBarBtn) {
+    addBarBtn.onclick = async () => {
+      const name = prompt("Ange namn på ny Barlagare:");
+      if (name && name.trim()) {
+        const cleanName = name.trim();
+        if (!currentAlla.includes(cleanName)) {
+          currentAlla.push(cleanName);
+          await saveTeamData();
+          renderBarlagetLists();
+        }
+      }
+    };
   }
 }
 
 /* ============================================================
-   6. FLIK: ADMIN
+   8. FLIK 4: ADMIN
    ============================================================ */
 document.getElementById("adminLoginBtn").addEventListener("click", () => {
   const pw = document.getElementById("adminPassword").value;
@@ -224,7 +512,6 @@ document.getElementById("adminLoginBtn").addEventListener("click", () => {
 function initAdminMonthSelect() {
   const select = document.getElementById("adminMonthSelect");
   select.innerHTML = "";
-  // Erbjud föregående, nuvarande och kommande två månader att redigera
   for (let d = -1; d <= 2; d++) {
     const key = addMonthsToKey(currentKey, d);
     const opt = document.createElement("option");
@@ -241,7 +528,6 @@ document.getElementById("loadSubmissionsBtn").addEventListener("click", async ()
   const key = document.getElementById("adminMonthSelect").value;
   currentBuilderMonth = key;
 
-  // Hämta svar
   const snap = await db.collection("submissions").where("month", "==", key).get();
   const tbody = document.querySelector("#submissionsTable tbody");
   tbody.innerHTML = "";
@@ -256,9 +542,16 @@ document.getElementById("loadSubmissionsBtn").addEventListener("click", async ()
   });
   document.getElementById("submissionsCard").style.display = "block";
 
-  // Bygg schema-formulär
   await buildScheduleEditor(key);
   document.getElementById("builderCard").style.display = "block";
+});
+
+document.getElementById("autoGenerateBtn").addEventListener("click", async () => {
+  if (confirm("Vill du slumpa schemat för vald månad automatiskt? Eventuella ändringar du skrivit in skrivs över.")) {
+    await generateAutoSchedule(currentBuilderMonth);
+    await buildScheduleEditor(currentBuilderMonth);
+    alert("Nytt schema har slumpats med hänsyn till 'Kan EJ'!");
+  }
 });
 
 async function buildScheduleEditor(key) {
@@ -273,7 +566,7 @@ async function buildScheduleEditor(key) {
 
   dates.forEach(dt => {
     const isOnsdag = dt.weekday === "onsdag";
-    const defaultTime = isOnsdag ? "17:30-22:30" : "20:30-02:30";
+    const defaultTime = isOnsdag ? "17:30-22:00" : "20:30-02:00";
     const barCount = isOnsdag ? 2 : 3;
     const ex = existingByDate[dt.iso];
 
@@ -293,7 +586,7 @@ async function buildScheduleEditor(key) {
     div.innerHTML = `
       <strong>${dt.label}</strong>
       <div class="builder-row">
-        <input type="text" class="event-input" placeholder="Ev. rubrik (t.ex. Quiz, Oktoberfest)" value="${ex ? ex.event || "" : ""}" />
+        <input type="text" class="event-input" placeholder="Ev. event (t.ex. Quiz)" value="${ex ? ex.event || "" : ""}" />
         <input type="text" class="time-input" placeholder="Tid" value="${ex ? ex.time || defaultTime : defaultTime}" />
       </div>
       <div class="builder-row">
@@ -346,7 +639,8 @@ document.getElementById("saveScheduleBtn").addEventListener("click", async () =>
 });
 
 /* ============================================================
-   7. INIT
+   9. INIT
    ============================================================ */
+initBarlagetTab();
 initForm();
-initSchedule();
+initScheduleSelect();

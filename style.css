@@ -46,8 +46,8 @@ header h1 {
   background: transparent;
   border: none;
   color: #bbb;
-  padding: 12px 8px;
-  font-size: 0.95rem;
+  padding: 12px 4px;
+  font-size: 0.85rem;
   cursor: pointer;
   border-bottom: 3px solid transparent;
 }
@@ -115,7 +115,7 @@ textarea {
 }
 
 .btn-primary { background: var(--purple); color: white; }
-.btn-secondary { background: #eee; color: var(--text); margin-left: 8px; }
+.btn-secondary { background: #eee; color: var(--text); }
 
 .status { margin-top: 10px; font-weight: 600; }
 
@@ -180,3 +180,83 @@ th, td {
   margin-bottom: 6px;
 }
 .builder-row input { flex: 1; }
+
+.team-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.team-list li {
+  padding: 8px 0;
+  border-bottom: 1px solid #eee;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.team-list li:last-child { border-bottom: none; }
+
+.badge {
+  background: var(--purple);
+  color: white;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+
+.section-header-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.section-header-inline h2 {
+  margin: 0;
+}
+
+.btn-icon {
+  background: var(--purple);
+  color: white;
+  border: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.btn-icon:hover {
+  opacity: 0.9;
+}
+
+.btn-remove {
+  background: #ff4d4d;
+  color: white;
+  border: none;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  margin-left: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-remove:hover {
+  background: #cc0000;
+}
+
+.member-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
