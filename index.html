@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>No4 Schema</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header>
+  <h1>🍻 No4 – Schemaläggning</h1>
+  <nav id="tabs">
+    <button class="tab-btn active" data-tab="form">Fyll i formulär</button>
+    <button class="tab-btn" data-tab="schedule">Schema</button>
+    <button class="tab-btn" data-tab="admin">Admin</button>
+  </nav>
+</header>
+
+<main>
+
+  <!-- ================= FLIK 1: FORMULÄR ================= -->
+  <section id="tab-form" class="tab-content active">
+    <div class="card">
+      <h2 id="form-title">Formulär</h2>
+      <p id="form-subtitle" class="muted"></p>
+
+      <form id="availabilityForm">
+        <label>Namn *</label>
+        <input type="text" id="name" required />
+
+        <label>Ungefär hur många gånger vill du jobba denna månaden? *</label>
+        <p class="muted small">Frikort får du utnyttja en gång per termin – ge då en förklaring nedan för varför du inte kan jobba.</p>
+        <div class="radio-group" id="shiftsGroup">
+          <label><input type="radio" name="shifts" value="1-2" required /> 1–2</label>
+          <label><input type="radio" name="shifts" value="2-3" /> 2–3</label>
+          <label><input type="radio" name="shifts" value="3-4" /> 3–4</label>
+          <label><input type="radio" name="shifts" value="frikort" /> Frikort – jag vill helst inte jobba alls</label>
+        </div>
+
+        <div id="frikortMotivering" style="display:none;">
+          <label>Motivering till frikort</label>
+          <textarea id="frikortText" rows="2"></textarea>
+        </div>
+
+        <label>Vilka kvällar kan du INTE jobba denna månaden? *</label>
+        <p class="muted small">Vi schemalägger dig inte fler pass bara för att du är tillgänglig fler datum – det gör det bara lättare för oss att sätta schema.</p>
+        <div id="dateCheckboxes" class="checkbox-group">
+          <!-- fylls i av JS -->
+        </div>
+
+        <button type="submit" class="btn-primary">Skicka in</button>
+        <p id="formStatus" class="status"></p>
+      </form>
+    </div>
+  </section>
+
+  <!-- ================= FLIK 2: SCHEMA ================= -->
+  <section id="tab-schedule" class="tab-content">
+    <div id="scheduleWrapper">
+      <div id="prevMonthBlock" class="month-block"></div>
+      <div id="currentMonthBlock" class="month-block"></div>
+      <div id="nextMonthBlock" class="month-block"></div>
+    </div>
+  </section>
+
+  <!-- ================= FLIK 3: ADMIN ================= -->
+  <section id="tab-admin" class="tab-content">
+    <div class="card" id="adminLoginCard">
+      <h2>Admin – logga in</h2>
+      <input type="password" id="adminPassword" placeholder="Lösenord" />
+      <button class="btn-primary" id="adminLoginBtn">Logga in</button>
+      <p class="muted small">(Enkelt lösenordsskydd – dela inte länken/lösenordet publikt.)</p>
+    </div>
+
+    <div id="adminPanel" style="display:none;">
+      <div class="card">
+        <h2>Bygg schema för månad</h2>
+        <label>Välj månad</label>
+        <select id="adminMonthSelect"></select>
+        <button class="btn-secondary" id="loadSubmissionsBtn">Visa svar & bygg schema</button>
+      </div>
+
+      <div class="card" id="submissionsCard" style="display:none;">
+        <h3>Inkomna svar</h3>
+        <table id="submissionsTable">
+          <thead><tr><th>Namn</th><th>Vill jobba</th><th>Kan EJ dessa datum</th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <p class="muted small">Personer som inte svarat alls antas vilja jobba 1 pass och vara tillgängliga alla datum.</p>
+      </div>
+
+      <div class="card" id="builderCard" style="display:none;">
+        <h3>Schema-byggare</h3>
+        <div id="builderDays"></div>
+        <button class="btn-primary" id="saveScheduleBtn">Spara & publicera schema</button>
+        <p id="adminStatus" class="status"></p>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- Firebase -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
