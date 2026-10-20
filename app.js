@@ -100,7 +100,7 @@ document.querySelectorAll(".tab-btn").forEach(btn => {
 });
 
 /* ============================================================
-   4. FLIK 1: FORMULÄR
+   4. FLIK 1: FORMULÄR 
    ============================================================ */
 const today = todayDate();
 const currentKey = monthKey(today);
@@ -122,7 +122,7 @@ function initForm() {
   formClosedMsg.style.display = "none";
 
   document.getElementById("form-title").textContent = `Formulär – ${monthKeyToName(formTargetMonth)}`;
-  document.getElementById("form-subtitle").textContent = `Svara innan den 20:e denna månad. Svarar du inte antas du vilja jobba 1 pass och vara tillgänglig alla datum.`;
+  document.getElementById("form-subtitle").textContent = `Svara eller ändra ditt svar innan den 20:e denna månad. Om du inte svarar antas du vilja jobba 1 pass och vara tillgänglig alla datum.`;
 
   const dates = getShiftDatesInMonth(formTargetMonth);
   const container = document.getElementById("dateCheckboxes");
@@ -144,6 +144,64 @@ function initForm() {
       cb.disabled = e.target.checked;
     });
   });
+
+  // När användaren väljer sitt namn i dropdown: hämta eventuellt tidigare svar
+  document.getElementById("nameSelect").addEventListener("change", async (e) => {
+    const selectedName = e.target.value;
+    if (!selectedName) return;
+
+    const docId = `${formTargetMonth}_${selectedName.replace(/\s+/g, '_')}`;
+    const statusEl = document.getElementById("formStatus");
+    statusEl.textContent = "Hämtar ditt tidigare svar...";
+
+    try {
+      const doc = await db.collection("submissions").doc(docId).get();
+      if (doc.exists) {
+        const data = doc.data();
+        
+        // 1. Sätt antal pass
+        const shiftRadio = document.querySelector(`input[name="shifts"][value="${data.shifts}"]`);
+        if (shiftRadio) shiftRadio.checked = true;
+
+        // Visa/dölj frikortstext
+        document.getElementById("frikortMotivering").style.display =
+          data.shifts === "frikort" ? "block" : "none";
+        document.getElementById("frikortText").value = data.frikortText || "";
+
+        // 2. Sätt datum
+        const unavailable = data.unavailable || [];
+        if (unavailable.length === 0) {
+          document.getElementById("availableAll").checked = true;
+          document.querySelectorAll(".dateCheck").forEach(cb => {
+            cb.checked = false;
+            cb.disabled = true;
+          });
+        } else {
+          document.getElementById("availableAll").checked = false;
+          document.querySelectorAll(".dateCheck").forEach(cb => {
+            cb.disabled = false;
+            cb.checked = unavailable.includes(cb.value);
+          });
+        }
+
+        statusEl.textContent = "ℹ️ Ditt tidigare inskickade svar har laddats in. Du kan ändra och skicka in igen.";
+      } else {
+        // Återställ formuläret om inget tidigare svar finns
+        document.querySelector('input[name="shifts"][value="1"]').checked = true;
+        document.getElementById("frikortMotivering").style.display = "none";
+        document.getElementById("frikortText").value = "";
+        document.getElementById("availableAll").checked = false;
+        document.querySelectorAll(".dateCheck").forEach(cb => {
+          cb.checked = false;
+          cb.disabled = false;
+        });
+        statusEl.textContent = "";
+      }
+    } catch (err) {
+      console.error(err);
+      statusEl.textContent = "";
+    }
+  });
 }
 
 document.querySelectorAll('input[name="shifts"]').forEach(r => {
@@ -156,6 +214,8 @@ document.querySelectorAll('input[name="shifts"]').forEach(r => {
 document.getElementById("availabilityForm").addEventListener("submit", async (e) => {
   e.preventDefault();
   const name = document.getElementById("nameSelect").value;
+  if (!name) return;
+
   const shiftsEl = document.querySelector('input[name="shifts"]:checked');
   const shifts = shiftsEl ? shiftsEl.value : "1";
   const availableAll = document.getElementById("availableAll").checked;
@@ -164,10 +224,13 @@ document.getElementById("availabilityForm").addEventListener("submit", async (e)
   const frikortText = document.getElementById("frikortText").value.trim();
 
   const statusEl = document.getElementById("formStatus");
-  statusEl.textContent = "Skickar...";
+  statusEl.textContent = "Sparar...";
+
+  // Unikt dokument-ID per person och månad (skriver över gamla svar)
+  const docId = `${formTargetMonth}_${name.replace(/\s+/g, '_')}`;
 
   try {
-    await db.collection("submissions").add({
+    await db.collection("submissions").doc(docId).set({
       name,
       month: formTargetMonth,
       shifts,
@@ -175,9 +238,7 @@ document.getElementById("availabilityForm").addEventListener("submit", async (e)
       frikortText: shifts === "frikort" ? frikortText : "",
       timestamp: firebase.firestore.FieldValue.serverTimestamp()
     });
-    statusEl.textContent = "✅ Tack! Ditt svar är inskickat.";
-    e.target.reset();
-    document.querySelectorAll(".dateCheck").forEach(cb => cb.disabled = false);
+    statusEl.textContent = "✅ Ditt svar har sparats/uppdaterats!";
   } catch (err) {
     console.error(err);
     statusEl.textContent = "❌ Något gick fel, försök igen.";
